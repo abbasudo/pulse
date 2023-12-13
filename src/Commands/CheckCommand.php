@@ -14,6 +14,7 @@ use Laravel\Pulse\Pulse;
 use Laravel\Pulse\Support\CacheStoreResolver;
 use Symfony\Component\Console\Attribute\AsCommand;
 
+
 /**
  * @internal
  */
@@ -46,12 +47,12 @@ class CheckCommand extends Command
 
         $interval = CarbonInterval::seconds(5);
 
-        $lastSnapshotAt = CarbonImmutable::now()->floorSeconds((int) $interval->totalSeconds);
+        $lastSnapshotAt = CarbonImmutable::now()->floorSeconds((int)$interval->totalSeconds);
 
         while (true) {
             $now = CarbonImmutable::now();
 
-            if ($now->subSeconds((int) $interval->totalSeconds)->lessThan($lastSnapshotAt)) {
+            if ($now->subSeconds((int)$interval->totalSeconds)->lessThan($lastSnapshotAt)) {
                 Sleep::for(500)->milliseconds();
 
                 continue;
@@ -61,18 +62,39 @@ class CheckCommand extends Command
                 return self::SUCCESS;
             }
 
-            $lastSnapshotAt = $now->floorSeconds((int) $interval->totalSeconds);
+            $lastSnapshotAt = $now->floorSeconds((int)$interval->totalSeconds);
 
             $event->dispatch(new SharedBeat($lastSnapshotAt, $interval));
 
             if (
                 ($lockProvider ??= $cache->store()->getStore()) instanceof LockProvider &&
-                $lockProvider->lock("laravel:pulse:check:{$lastSnapshotAt->getTimestamp()}", (int) $interval->totalSeconds)->get()
+                $lockProvider->lock(
+                    "laravel:pulse:check:{$lastSnapshotAt->getTimestamp()}",
+                    (int)$interval->totalSeconds
+                )->get()
             ) {
+                $this->writeOutput();
                 $event->dispatch(new IsolatedBeat($lastSnapshotAt, $interval));
             }
 
             $pulse->store();
         }
+    }
+
+    /**
+     * Write the output for the Check Command.
+     *
+     * @return void
+     */
+    protected function writeOutput()
+    {
+        $this->output->write(
+            sprintf(
+                '  <fg=gray>%s</> ',
+                now()->format('Y-m-d H:i:s')
+            )
+        );
+
+        return $this->output->writeln(' <fg=green;options=bold>RECORDING</>');
     }
 }
